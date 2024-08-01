@@ -20,23 +20,11 @@ const TRANSFERS_NS: &str = "transfer";
 const VOTES_INDEX_NS: &str = "+votes";
 const TRANSFERS_INDEX_NS: &str = "+transfers";
 impl Store {
-    async fn make_new_with_path<Path: AsRef<std::path::Path>>(path: Path) -> Result<Self> {
+    /// Open a store at the given path, creating it if necessary.
+    pub async fn with_path<Path: AsRef<std::path::Path>>(path: Path) -> Result<Self> {
         let mut opts = rocksdb::Options::default();
         opts.create_if_missing(true);
-
-        // RocksDB's `create_if_missing` does not create any column families.
-        // And, when opening an existing database, we need to supply all the existing ones.
-        let mut db = rocksdb::DB::open(&opts, path)?;
-        db.create_cf(VOTES_NS, &rocksdb::Options::default())?;
-        db.create_cf(TRANSFERS_NS, &rocksdb::Options::default())?;
-        db.create_cf(VOTES_INDEX_NS, &rocksdb::Options::default())?;
-        db.create_cf(TRANSFERS_INDEX_NS, &rocksdb::Options::default())?;
-        Ok(Self { db })
-    }
-
-    async fn open_existing_with_path<Path: AsRef<std::path::Path>>(path: Path) -> Result<Self> {
-        let mut opts = rocksdb::Options::default();
-        opts.create_if_missing(false);
+        opts.create_missing_column_families(true);
 
         let db = rocksdb::DB::open_cf(
             &opts,
@@ -44,16 +32,6 @@ impl Store {
             vec![VOTES_NS, TRANSFERS_NS, VOTES_INDEX_NS, TRANSFERS_INDEX_NS],
         )?;
         Ok(Self { db })
-    }
-
-    /// Open a store at the given path, creating it if necessary.
-    pub async fn with_path<Path: AsRef<std::path::Path>>(path: Path) -> Result<Self> {
-        let db = Self::open_existing_with_path(&path).await;
-        if let Ok(db) = db {
-            return Ok(db);
-        }
-        let db = Self::make_new_with_path(&path).await?;
-        Ok(db)
     }
 }
 
@@ -215,11 +193,14 @@ impl Store {
         let prefix = postcard::to_stdvec(&block_index).unwrap();
 
         let mut votes = Vec::new();
-        for each in self.db.prefix_iterator_cf(cf, prefix) {
-            let Ok((_k, v)) = each else {
+        for each in self.db.prefix_iterator_cf(cf, &prefix) {
+            let Ok((k, v)) = each else {
                 tracing::error!("Failed to get a row from the database");
                 continue;
             };
+            if !k.starts_with(&prefix) {
+                break;
+            }
             let Ok(key) = postcard::from_bytes::<Signature>(&v) else {
                 continue;
             };
@@ -238,11 +219,14 @@ impl Store {
         let prefix = postcard::to_stdvec(&block_index).unwrap();
 
         let mut transfers = Vec::new();
-        for each in self.db.prefix_iterator_cf(cf, prefix) {
-            let Ok((_k, v)) = each else {
+        for each in self.db.prefix_iterator_cf(cf, &prefix) {
+            let Ok((k, v)) = each else {
                 tracing::error!("Failed to get a row from the database");
                 continue;
             };
+            if !k.starts_with(&prefix) {
+                break;
+            }
             let Ok(key) = postcard::from_bytes::<Signature>(&v) else {
                 continue;
             };

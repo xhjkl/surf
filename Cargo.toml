@@ -22,3 +22,6 @@ serde_json                = { version = "1.0.121", features = [] }
 solana-client             = { version = "2.0.3",   features = [] }
 solana-sdk                = { version = "2.0.3",   features = [] }
 solana-transaction-status = { version = "2.0.3",   features = [] }
+
+[dev-dependencies]
+rand = "0.8.5"

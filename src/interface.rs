@@ -2,11 +2,17 @@
 //! What the users see.
 
 use std::fmt::Debug;
+use std::str::FromStr;
 use std::sync::Arc;
 
+use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer};
+use solana_sdk::pubkey::Pubkey;
 use std::net::ToSocketAddrs;
 use tokio_util::sync::CancellationToken;
+
+mod finding_transfers;
+mod finding_votes;
 
 use crate::store::Store;
 use crate::Result;
@@ -33,68 +39,57 @@ async fn get_votes(
     store: web::Data<Arc<Store>>,
     web::Query(filters): web::Query<Criteria>,
 ) -> Result<String> {
-    let all_votes = store.get_all_votes().await?;
+    use finding_votes::{
+        find_votes_with_block_index, find_votes_with_full_scan, find_votes_with_signature,
+    };
 
-    let mut votes = Vec::with_capacity(all_votes.len());
-    for vote in all_votes {
-        if let Some(ref signature) = filters.signature {
-            if vote.signature.to_string() != *signature {
-                continue;
-            }
+    let store = store.get_ref();
+    let votes = match (
+        &filters.signature,
+        &filters.block,
+        &filters.to,
+        &filters.from,
+    ) {
+        (Some(signature), None, None, None) => find_votes_with_signature(store, signature).await,
+        (None, Some(block), None, None) => find_votes_with_block_index(store, *block).await,
+        _ => {
+            let block_index = filters.block;
+            let to = filters.to.as_deref().map(Pubkey::from_str).transpose()?;
+            let from = filters.from.as_deref().map(Pubkey::from_str).transpose()?;
+            find_votes_with_full_scan(store, block_index, to, from).await
         }
-        if let Some(block) = filters.block {
-            if vote.block_index != block {
-                continue;
-            }
-        }
-        if let Some(ref to) = filters.to {
-            if vote.target.to_string() != *to {
-                continue;
-            }
-        }
-        if let Some(ref from) = filters.from {
-            if vote.author.to_string() != *from {
-                continue;
-            }
-        }
-        votes.push(vote);
-    }
-
-    Ok(serde_json::to_string(&votes)?)
+    };
+    Ok(serde_json::to_string(&votes?)?)
 }
 
 async fn get_transfers(
     store: web::Data<Arc<Store>>,
     web::Query(filters): web::Query<Criteria>,
 ) -> Result<String> {
-    let all_transfers = store.get_all_transfers().await?;
+    use finding_transfers::{
+        find_transfers_with_block_index, find_transfers_with_full_scan,
+        find_transfers_with_signature,
+    };
 
-    let mut transfers = Vec::with_capacity(all_transfers.len());
-    for transfer in all_transfers {
-        if let Some(ref signature) = filters.signature {
-            if transfer.signature.to_string() != *signature {
-                continue;
-            }
+    let store = store.get_ref();
+    let transfers = match (
+        &filters.signature,
+        &filters.block,
+        &filters.to,
+        &filters.from,
+    ) {
+        (Some(signature), None, None, None) => {
+            find_transfers_with_signature(store, signature).await
         }
-        if let Some(block) = filters.block {
-            if transfer.block_index != block {
-                continue;
-            }
+        (None, Some(block), None, None) => find_transfers_with_block_index(store, *block).await,
+        _ => {
+            let block_index = filters.block;
+            let to = filters.to.as_deref().map(Pubkey::from_str).transpose()?;
+            let from = filters.from.as_deref().map(Pubkey::from_str).transpose()?;
+            find_transfers_with_full_scan(store, block_index, to, from).await
         }
-        if let Some(ref to) = filters.to {
-            if transfer.destination.to_string() != *to {
-                continue;
-            }
-        }
-        if let Some(ref from) = filters.from {
-            if transfer.source.to_string() != *from {
-                continue;
-            }
-        }
-        transfers.push(transfer);
-    }
-
-    Ok(serde_json::to_string(&transfers)?)
+    };
+    Ok(serde_json::to_string(&transfers?)?)
 }
 
 /// Run the server.
@@ -109,6 +104,7 @@ where
     tracing::info!("Starting web server on {address:?}...");
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .app_data(web::Data::new(store.clone()))
             .route("/", web::get().to(index))
             .route("/blockheight", web::get().to(get_last_known_block))

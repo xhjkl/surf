@@ -40,7 +40,9 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting...");
 
-    let store = Arc::new(Store::with_path(".store").await?);
+    // The database that gets filled in the background
+    // and that the web interface queries:
+    let store = Arc::new(Store::with_path(args.store_path).await?);
 
     let stop = CancellationToken::new();
 
@@ -49,22 +51,34 @@ async fn main() -> Result<()> {
     let last_known_block = store.last_known_block().await;
     tracing::trace!("Last known block index: {:?}", last_known_block);
 
-    let extractor = tokio::spawn(extract_continuously(
-        tx,
-        stop.clone(),
-        args.url.to_owned(),
-        last_known_block,
-    ));
+    let mut tasks = Vec::new();
+    if !args.dry {
+        // The background task that reads the blocks,
+        // forms the relevant records from it, and sends those records
+        // by the given channel:
+        let extractor = tokio::spawn(extract_continuously(
+            tx,
+            stop.clone(),
+            args.url.to_owned(),
+            last_known_block,
+        ));
 
-    let committer = tokio::spawn(store_all_records_from(rx, store.clone(), stop.clone()));
+        // The background task that reads the records sent,
+        // and stores them in the database:
+        let committer = tokio::spawn(store_all_records_from(rx, store.clone(), stop.clone()));
 
+        tasks.push(extractor);
+        tasks.push(committer);
+    }
+
+    // The web interface:
     serve_forever((args.host, args.port), store.clone(), stop.clone()).await?;
 
-    // Assuming `actix-web` has already handled the SIGINT:
+    // Assuming `actix-web` has already handled the SIGINT.
     stop.cancel();
     tracing::info!("Received SIGINT; waiting for the network to finish...");
 
-    for task in [extractor, committer].into_iter() {
+    for task in tasks.into_iter() {
         let awaited = task.await;
         if let Err(e) = awaited {
             tracing::error!("Failed to rejoin a background task: {e:?}");

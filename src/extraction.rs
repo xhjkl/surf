@@ -91,7 +91,7 @@ async fn emit_transfer(
 
     let sent = tx
         .send(Record::Transfer(Transfer {
-            signature: *signature, 
+            signature: *signature,
             block_index: block_index.to_owned(),
             timestamp: timestamp.to_owned(),
             source,
@@ -235,7 +235,6 @@ async fn do_extract_continuously(
     since_block: &mut Option<u64>,
 ) -> Result<()> {
     let client = RpcClient::new(rpc_url);
-
     tracing::info!("Connected to `{}`", client.url());
 
     let mut next_block = match since_block {

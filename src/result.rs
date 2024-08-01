@@ -1,5 +1,6 @@
 //! An application-specific result type.
 
+use actix_web::http::StatusCode;
 use actix_web::ResponseError;
 use thiserror::Error;
 
@@ -8,6 +9,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("while calling into the underlying OS: {0}")]
     ExpectationViolation(#[from] std::io::Error),
+    #[error("not found")]
+    NotFound,
     #[error("failed to open the database: {0}")]
     Database(#[from] rocksdb::Error),
     #[error("failed to deserialize: {0}")]
@@ -29,12 +32,13 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl ResponseError for Error {
-    fn status_code(&self) -> actix_web::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            Error::SolanaBadSignature(_) => actix_web::http::StatusCode::BAD_REQUEST,
-            Error::SolanaBadPubkey(_) => actix_web::http::StatusCode::BAD_REQUEST,
-            Error::SolanaBadNumber(_) => actix_web::http::StatusCode::BAD_REQUEST,
-            _ => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Error::NotFound => StatusCode::NOT_FOUND,
+            Error::SolanaBadSignature(_) => StatusCode::BAD_REQUEST,
+            Error::SolanaBadPubkey(_) => StatusCode::BAD_REQUEST,
+            Error::SolanaBadNumber(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

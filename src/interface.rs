@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 mod finding_transfers;
 mod finding_votes;
 
+use crate::record::{PrettyTransfer, PrettyVote};
 use crate::store::Store;
 use crate::Result;
 
@@ -59,7 +60,8 @@ async fn get_votes(
             find_votes_with_full_scan(store, block_index, to, from).await
         }
     };
-    Ok(serde_json::to_string(&votes?)?)
+    let votes = votes?.into_iter().map(PrettyVote::from).collect::<Vec<_>>();
+    Ok(serde_json::to_string(&votes)?)
 }
 
 async fn get_transfers(
@@ -89,7 +91,11 @@ async fn get_transfers(
             find_transfers_with_full_scan(store, block_index, to, from).await
         }
     };
-    Ok(serde_json::to_string(&transfers?)?)
+    let transfers = transfers?
+        .into_iter()
+        .map(PrettyTransfer::from)
+        .collect::<Vec<_>>();
+    Ok(serde_json::to_string(&transfers)?)
 }
 
 /// Run the server.

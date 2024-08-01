@@ -2,7 +2,7 @@
 
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Vote {
     pub signature: Signature,
     pub block_index: u64,
@@ -11,7 +11,7 @@ pub struct Vote {
     pub target: Pubkey,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Transfer {
     pub signature: Signature,
     pub block_index: u64,
@@ -28,38 +28,46 @@ pub enum Record {
     Transfer(Transfer),
 }
 
-// Forcing the keys to be pretty.
-impl serde::Serialize for Vote {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PrettyVote {
+    pub signature: String,
+    pub block: u64,
+    pub timestamp: u64,
+    pub author: String,
+    pub target: String,
+}
 
-        let mut map = serializer.serialize_map(Some(5))?;
-        map.serialize_entry("signature", &self.signature.to_string())?;
-        map.serialize_entry("block", &self.block_index)?;
-        map.serialize_entry("timestamp", &self.timestamp)?;
-        map.serialize_entry("author", &self.author.to_string())?;
-        map.serialize_entry("target", &self.target.to_string())?;
-        map.end()
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PrettyTransfer {
+    pub signature: String,
+    pub block: u64,
+    pub timestamp: u64,
+    pub source: String,
+    pub destination: String,
+    pub lamports: u64,
+}
+
+impl From<Vote> for PrettyVote {
+    fn from(vote: Vote) -> Self {
+        Self {
+            signature: vote.signature.to_string(),
+            block: vote.block_index,
+            timestamp: vote.timestamp,
+            author: vote.author.to_string(),
+            target: vote.target.to_string(),
+        }
     }
 }
 
-impl serde::Serialize for Transfer {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
-
-        let mut map = serializer.serialize_map(Some(5))?;
-        map.serialize_entry("signature", &self.signature.to_string())?;
-        map.serialize_entry("block", &self.block_index)?;
-        map.serialize_entry("timestamp", &self.timestamp)?;
-        map.serialize_entry("source", &self.source.to_string())?;
-        map.serialize_entry("destination", &self.destination.to_string())?;
-        map.serialize_entry("lamports", &self.lamports)?;
-        map.end()
+impl From<Transfer> for PrettyTransfer {
+    fn from(transfer: Transfer) -> Self {
+        Self {
+            signature: transfer.signature.to_string(),
+            block: transfer.block_index,
+            timestamp: transfer.timestamp,
+            source: transfer.source.to_string(),
+            destination: transfer.destination.to_string(),
+            lamports: transfer.lamports,
+        }
     }
 }

@@ -4535,6 +4535,7 @@ dependencies = [
  "actix-web",
  "clap 4.5.11",
  "postcard",
+ "rand 0.8.5",
  "rocksdb",
  "serde",
  "serde_json",
